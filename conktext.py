@@ -1,12 +1,14 @@
+from __future__ import division
 import curses
 import locale
 import psutil
 from collections import OrderedDict
-from Bars import VerticalBar, HorizontalBar, HorizontalText
+from Bars import VerticalBar, HorizontalBar, HorizontalText, HorizontalBarWithData
 import commands
 import re
 import socket
 from datetime import timedelta
+
 
 locale.setlocale(locale.LC_ALL, "")
 coding = locale.getpreferredencoding()
@@ -131,7 +133,7 @@ class MemHoriz(HorizontalBar):
         values[title] = float(self.get_mem_value()[1])
         self.update_window("", values, offset=1)
 
-class DiskUsage(HorizontalBar):
+class DiskUsage(HorizontalBarWithData):
 
     def colors(self):
         colors = {
@@ -149,12 +151,44 @@ class DiskUsage(HorizontalBar):
         self.set_colors(colors)
         self.set_fill_percentage(levels)
     
+    def convert_data(self, bytes, metric=False):
+        bytes = long(bytes)
+        abbrevs = ()
+        if metric is False:
+            abbrevs = ( 
+                (1<<50L, 'PiB'),
+                (1<<40L, 'TiB'),
+                (1<<30L, 'GiB'),
+                (1<<20L, 'MiB'),
+                (1<<10L, 'kiB'),
+                (1, 'B')
+            )
+        else:
+            abbrevs = (
+                (1000**5L, 'PB'),
+                (1000**4L, 'TB'),
+                (1000**3L, 'GB'),
+                (1000**2L, 'MB'),
+                (1000, 'kB'),
+                (1, 'B')
+            )
+        if bytes == 1:
+            return "1 byte"
+        for factor, suffix in abbrevs:
+            if bytes >= factor:
+                break
+        return '%i %s' % (bytes / factor, suffix)
+
     def get_data(self, directories):
         a = OrderedDict()
         for directory in directories:
             usage = psutil.disk_usage(directory)
+            percent = usage.percent
+            used = self.convert_data(usage.used, metric=False)
+            total = self.convert_data(usage.total, metric=False)
             title = "Directory %s" % directory
-            a[title] = usage.percent
+            text = "%s / %s" % (used, total)
+            a[title] = [text, percent]
         return a
 
     def update(self):
@@ -179,7 +213,7 @@ class ComputerInfo(HorizontalText):
 
     def get_info(self):
         a = OrderedDict()
-        a["IP Address"] = self.ip_address("wlp3s0")
+        a["IP Address"] = self.ip_address("eth0")
         a["Hostname"] = self.hostname()
         a["Uptime"] = self.uptime()
         return a
@@ -208,17 +242,17 @@ class ComputerInfo(HorizontalText):
         values = self.get_info()
         self.update_window("", values, offset=1)
 
-class BatteryBar(HorizontalBar):
+class BatteryBar(HorizontalBarWithData):
 
     def colors(self):
         colors = {
             "title": self.RED | curses.A_BOLD,
             "border": self.WHITE,
-            "text": self.BLUE | curses.A_BOLD,
         }
 
         levels = {
-            80: self.GREEN,
+            100: self.BLUE | curses.A_BOLD,
+            99: self.GREEN | curses.A_BOLD,
             70: self.YELLOW | curses.A_BOLD,
             20: self.RED,
         }
@@ -232,8 +266,8 @@ class BatteryBar(HorizontalBar):
         regex_full = r'Full'
         match_full = re.search(regex_full, data)
         if match_full:
-            title = "Fully charged"
-            percent = 100
+            title = "Battery: 100% charged"
+            percent = ["On AC Power", "100"]
             return (title, percent)
         match = re.search(regex, data)
         if match:
@@ -245,18 +279,19 @@ class BatteryBar(HorizontalBar):
             if title == "Disc": caption = "Batt"
             if title == "Char": caption = "AC"
         if not match:
-            return ("Unknown", 0.0)
+            return ("Unknown", ["", 0.0])
         if title == "Char":
-            time = "%s:%s to charge" % (time_hour, time_min)
+            title = "Battery: %s%%" % percent
+            time = "On AC - %s:%s" % (time_hour, time_min)
         else:
-            time = "%s:%s left" % (time_hour, time_min)
-        title = "On %s: %s" % (caption, time)
-        return (title, percent)
+            title = "Battery: %s%%" % percent
+            time = "Unplugged - %s:%s" % (time_hour, time_min)
+        return (title, [time, percent])
 
     def update(self):
-        title, percent = self.is_charging()
+        title, text = self.is_charging()
         a = OrderedDict()
-        a[title] = float(percent)
+        a[title] = [text[0], float(text[1])]
         self.update_window(title, a, offset=1)
 
 class Display(Screen):
@@ -271,9 +306,9 @@ class Display(Screen):
         self.window_list.append(CpuBar(10, 19, 1, 1, self.screen))
         self.window_list.append(MemBar(10, 7, 1, 20, self.screen))
         self.window_list.append(MemHoriz(7, 26, 11, 1, self.screen))
-        self.window_list.append(BatteryBar(4, 26, 18, 1, self.screen))
-        self.window_list.append(DiskUsage(10, 26, 22, 1, self.screen))
-        self.window_list.append(ComputerInfo(10, 26, 32, 1, self.screen))
+        self.window_list.append(BatteryBar(5, 26, 18, 1, self.screen))
+        self.window_list.append(DiskUsage(13, 26, 23, 1, self.screen))
+        self.window_list.append(ComputerInfo(10, 26, 36, 1, self.screen))
 
     def update_all(self):
         for window in self.window_list:

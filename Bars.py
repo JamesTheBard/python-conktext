@@ -115,6 +115,19 @@ class HorizontalBar(Bar):
             pass
         self.window.move(0, 0)
 
+    def generate_bar(self, percent):
+        width = self.width - 4
+        levels = width * 8
+        value = float(percent) / 100 * levels
+        full_bars = int(value / 8)
+        part_bar = int(value) % 8
+        bar = full_bars * self.HORIZONTAL[8]
+        if part_bar != 0:
+            bar += self.HORIZONTAL[part_bar]
+        if full_bars + part_bar == 0:
+            bar = self.HORIZONTAL[1]
+        return bar
+
     def update_bars(self, title, values, offset):
         width = self.width - 4
         levels = width * 8
@@ -124,12 +137,7 @@ class HorizontalBar(Bar):
                 seperator = self.VERTICAL["seperator"] * (self.width - 4)
                 self.window.addstr(offset + i - 1, 2, seperator.encode(coding),
                                    self.get_color("seperator"))
-            value = percent / 100 * levels
-            full_bars = int(value / 8)
-            part_bar = int(value) % 8
-            bar = full_bars * self.HORIZONTAL[8]
-            if part_bar != 0:
-                bar += self.HORIZONTAL[part_bar]
+            bar = self.generate_bar(percent)
             self.window.addstr(offset + i, 2, title.encode(coding), self.get_color("title"))
             self.window.addstr(offset + i + 1, 2, bar.encode(coding), self.get_color("fill", percent))
             i += 3
@@ -159,6 +167,41 @@ class HorizontalText(Bar):
             self.window.addstr(offset + i + 1, 2, text.encode(coding), self.get_color("text"))
             i += 3
             
+class HorizontalBarWithData(HorizontalBar):
+
+    def update_bars(self, title, values, offset):
+        width = self.width - 4
+        i = 0
+        for title, value in values.iteritems():
+            if i != 0:
+                seperator = self.VERTICAL["seperator"] * width
+                self.window.addstr(
+                    offset + i - 1,
+                    2,
+                    seperator.encode(coding),
+                    self.get_color("seperator"),
+                )
+            self.window.addstr(
+                offset + i, 
+                2, 
+                title.encode(coding), 
+                self.get_color("title")
+            )
+            self.window.addstr(
+                offset + i + 1,
+                2,
+                value[0].encode(coding),
+                self.get_color("text")
+            )
+            bar = self.generate_bar(value[1])
+            self.window.addstr(
+                offset + i + 2,
+                2,
+                bar.encode(coding),
+                self.get_color("fill", value[1])
+            )
+            i += 4
+
 
 class VerticalBar(Bar):
 
@@ -187,6 +230,8 @@ class VerticalBar(Bar):
             for j in range(0, full_bars):
                 y = j + y_offset
                 self.window.addstr(height - y, x, self.VERTICAL[8].encode(coding), self.get_color("fill", percent))
+            if full_bars + part_bar == 0:
+                part_bar = 1
             if part_bar != 0:
                 self.window.addstr(height - full_bars - y_offset, x, self.VERTICAL[part_bar].encode(coding), self.get_color("fill", percent))
             seperator = self.VERTICAL["seperator"] * (self.width - 4)
