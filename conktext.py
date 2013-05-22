@@ -216,7 +216,52 @@ class ComputerInfo(HorizontalText):
         a["IP Address"] = self.ip_address("eth0")
         a["Hostname"] = self.hostname()
         a["Uptime"] = self.uptime()
+        a["Distribution"] = self.get_distro()
+        a["Kernel"] = self.get_kernel()
+        a["CPU Info"] = self.get_cpu_info()
+        a["CPU Speed"] = self.get_cpu_speed()
         return a
+
+    def get_cpu_info(self):
+        crap = None
+        with open('/proc/cpuinfo', 'r') as f:
+            crap = f.readlines()
+        crap = [line.split(":")[1] for line in crap if "model name" in line][0]
+        if "Intel" in crap:
+            manufacturer = "Intel"
+        else:
+            manufacturer = "AMD"
+        regex = "(i[357]-[0-9]{3,4}[A-Z]{,2})"
+        match = re.search(regex, crap)
+        if match:
+            model = match.group(1)
+        else:
+            model = "Unknown"
+        template = "%s %s" % (manufacturer, model)
+        return template
+
+    def get_cpu_speed(self):
+        crap = None
+        with open('/proc/cpuinfo', 'r') as f:
+            crap = f.readlines()
+        crap = [line.split(":")[1] for line in crap if "cpu MHz" in line][0].strip()
+        template = "%s MHz" % crap
+        return template
+
+    def get_kernel(self):
+        version = commands.getoutput('uname --kernel-release').strip()
+        bitedness = commands.getoutput('uname -a').strip()
+        if "x86_64" in bitedness:
+            bits = "AMD64"
+        elif "i686" in bitedness:
+            bits = "IA-32"
+        else:
+            bits = "Unknown"
+        template = "%s (%s)" % (version, bits)
+        return template
+
+    def get_distro(self):
+        return "ArchLinux"
 
     def ip_address(self, interface):
         ipinfo = commands.getoutput("ifconfig %s" % interface)
@@ -308,7 +353,7 @@ class Display(Screen):
         self.window_list.append(MemHoriz(7, 26, 11, 1, self.screen))
         self.window_list.append(BatteryBar(5, 26, 18, 1, self.screen))
         self.window_list.append(DiskUsage(13, 26, 23, 1, self.screen))
-        self.window_list.append(ComputerInfo(10, 26, 36, 1, self.screen))
+        self.window_list.append(ComputerInfo(22, 26, 36, 1, self.screen))
 
     def update_all(self):
         for window in self.window_list:
